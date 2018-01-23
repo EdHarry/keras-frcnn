@@ -1,6 +1,6 @@
 from __future__ import absolute_import
 import numpy as np
-import cv2
+from PIL import Image
 import random
 import copy
 from . import data_augment
@@ -305,7 +305,10 @@ def get_anchor_gt(C, img_length_calc_function):
 			(resized_width, resized_height) = get_new_img_size(width, height, C.im_size)
 
 				# resize the image so that smalles side is length = 600px
-			x_img = cv2.resize(x_img, (resized_width, resized_height), interpolation=cv2.INTER_CUBIC)
+			x_img = Image.fromarray(x_img)
+			x_img = x_img.resize((resized_width, resized_height), Image.ANTIALIAS)
+			x_img = np.array(x_img)
+			#x_img = cv2.resize(x_img, (resized_width, resized_height), interpolation=cv2.INTER_CUBIC)
 
 			try:
 				y_rpn_cls, y_rpn_regr = calc_rpn(C, img_data_aug, width, height, resized_width, resized_height, img_length_calc_function)

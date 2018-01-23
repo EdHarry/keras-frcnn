@@ -1,4 +1,3 @@
-from __future__ import division
 import random
 import pprint
 import sys
@@ -7,29 +6,36 @@ import numpy as np
 from optparse import OptionParser
 import pickle
 
+#import tensorflow as tf
+#tf_config = tf.ConfigProto()
+#tf_config.graph_options.optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1
+#sess = tf.Session(config=tf_config)
+
 from keras import backend as K
+#K.set_session(sess)
+
 from keras.optimizers import Adam, SGD, RMSprop
 from keras.layers import Input
 from keras.models import Model
-from keras_frcnn import config, data_generators
+from keras_frcnn import config, data_generators_PIL as data_generators
 from keras_frcnn import losses as losses
-import keras_frcnn.roi_helpers as roi_helpers
+import keras_frcnn.roi_helpers_PIL as roi_helpers
 from keras.utils import generic_utils
 
 sys.setrecursionlimit(40000)
 
 parser = OptionParser()
 
-parser.add_option("-p", "--path", dest="train_path", help="Path to training data.")
+#parser.add_option("-p", "--path", dest="train_path", help="Path to training data.")
 parser.add_option("-o", "--parser", dest="parser", help="Parser to use. One of simple or pascal_voc",
 				default="pascal_voc")
-parser.add_option("-n", "--num_rois", type="int", dest="num_rois", help="Number of RoIs to process at once.", default=32)
+parser.add_option("-n", "--num_rois", dest="num_rois", help="Number of RoIs to process at once.", default=32)
 parser.add_option("--network", dest="network", help="Base network to use. Supports vgg or resnet50.", default='resnet50')
 parser.add_option("--hf", dest="horizontal_flips", help="Augment with horizontal flips in training. (Default=false).", action="store_true", default=False)
 parser.add_option("--vf", dest="vertical_flips", help="Augment with vertical flips in training. (Default=false).", action="store_true", default=False)
 parser.add_option("--rot", "--rot_90", dest="rot_90", help="Augment with 90 degree rotations in training. (Default=false).",
 				  action="store_true", default=False)
-parser.add_option("--num_epochs", type="int", dest="num_epochs", help="Number of epochs.", default=2000)
+parser.add_option("--num_epochs", dest="num_epochs", help="Number of epochs.", default=2000)
 parser.add_option("--config_filename", dest="config_filename", help=
 				"Location to store all the metadata related to the training (to be used when testing).",
 				default="config.pickle")
@@ -38,24 +44,26 @@ parser.add_option("--input_weight_path", dest="input_weight_path", help="Input p
 
 (options, args) = parser.parse_args()
 
-if not options.train_path:   # if filename is not given
-	parser.error('Error: path to training data must be specified. Pass --path to command line')
+# if not options.train_path:   # if filename is not given
+# 	parser.error('Error: path to training data must be specified. Pass --path to command line')
 
-if options.parser == 'pascal_voc':
-	from keras_frcnn.pascal_voc_parser import get_data
-elif options.parser == 'simple':
-	from keras_frcnn.simple_parser import get_data
-else:
-	raise ValueError("Command line option parser must be one of 'pascal_voc' or 'simple'")
+# if options.parser == 'pascal_voc':
+# 	from keras_frcnn.pascal_voc_parser import get_data
+# elif options.parser == 'simple':
+# 	from keras_frcnn.simple_parser import get_data
+# else:
+# 	raise ValueError("Command line option parser must be one of 'pascal_voc' or 'simple'")
 
 # pass the settings from the command line, and persist them in the config object
 C = config.Config()
 
-C.use_horizontal_flips = bool(options.horizontal_flips)
-C.use_vertical_flips = bool(options.vertical_flips)
-C.rot_90 = bool(options.rot_90)
+# C.use_horizontal_flips = bool(options.horizontal_flips)
+# C.use_vertical_flips = bool(options.vertical_flips)
+# C.rot_90 = bool(options.rot_90)
 
+#C.model_path = 'model_frcnn.hdf5'
 C.model_path = options.output_weight_path
+#C.num_rois = 32
 C.num_rois = int(options.num_rois)
 
 if options.network == 'vgg':
@@ -68,23 +76,21 @@ else:
 	print('Not a valid model')
 	raise ValueError
 
-
 # check if weight path was passed via command line
 if options.input_weight_path:
 	C.base_net_weights = options.input_weight_path
-else:
-	# set the path to weights based on backend and model
-	C.base_net_weights = nn.get_weight_path()
 
-all_imgs, classes_count, class_mapping = get_data(options.train_path)
+#all_imgs, classes_count, class_mapping = get_data(options.train_path)
 
+classes_count = {'cell': 1}
+class_mapping = {'cell': 0}
 if 'bg' not in classes_count:
 	classes_count['bg'] = 0
 	class_mapping['bg'] = len(class_mapping)
 
 C.class_mapping = class_mapping
 
-inv_map = {v: k for k, v in class_mapping.items()}
+# inv_map = {v: k for k, v in class_mapping.items()}
 
 print('Training images per class:')
 pprint.pprint(classes_count)
@@ -96,26 +102,29 @@ with open(config_output_filename, 'wb') as config_f:
 	pickle.dump(C,config_f)
 	print('Config has been written to {}, and can be loaded when testing to ensure correct results'.format(config_output_filename))
 
-random.shuffle(all_imgs)
+# random.shuffle(all_imgs)
 
-num_imgs = len(all_imgs)
+# num_imgs = len(all_imgs)
 
-train_imgs = [s for s in all_imgs if s['imageset'] == 'trainval']
-val_imgs = [s for s in all_imgs if s['imageset'] == 'test']
+# train_imgs = [s for s in all_imgs if s['imageset'] == 'trainval']
+# val_imgs = [s for s in all_imgs if s['imageset'] == 'test']
 
-print('Num train samples {}'.format(len(train_imgs)))
-print('Num val samples {}'.format(len(val_imgs)))
+# print('Num train samples {}'.format(len(train_imgs)))
+# print('Num val samples {}'.format(len(val_imgs)))
 
 
-data_gen_train = data_generators.get_anchor_gt(train_imgs, classes_count, C, nn.get_img_output_length, K.image_dim_ordering(), mode='train')
-data_gen_val = data_generators.get_anchor_gt(val_imgs, classes_count, C, nn.get_img_output_length,K.image_dim_ordering(), mode='val')
+# data_gen_train = data_generators.get_anchor_gt(train_imgs, classes_count, C, nn.get_img_output_length, K.image_dim_ordering(), mode='train')
+# data_gen_val = data_generators.get_anchor_gt(val_imgs, classes_count, C, nn.get_img_output_length,K.image_dim_ordering(), mode='val')
+data_gen_train = data_generators.get_anchor_gt(C, nn.get_img_output_length)
+data_gen_val = data_generators.get_anchor_gt(C, nn.get_img_output_length)
 
-if K.image_dim_ordering() == 'th':
-	input_shape_img = (3, None, None)
-else:
-	input_shape_img = (None, None, 3)
+# if K.image_dim_ordering() == 'th':
+# 	input_shape_img = (3, None, None)
+# else:
+# 	input_shape_img = (None, None, 3)
 
-img_input = Input(shape=input_shape_img)
+#img_input = Input(shape=input_shape_img)
+img_input = Input(shape=(None, None, 1))
 roi_input = Input(shape=(None, 4))
 
 # define the base network (resnet here, can be VGG, Inception, etc)
@@ -134,12 +143,11 @@ model_classifier = Model([img_input, roi_input], classifier)
 model_all = Model([img_input, roi_input], rpn[:2] + classifier)
 
 try:
-	print('loading weights from {}'.format(C.base_net_weights))
-	model_rpn.load_weights(C.base_net_weights, by_name=True)
-	model_classifier.load_weights(C.base_net_weights, by_name=True)
+	print('loading weights from {}'.format(C.model_path))
+	model_rpn.load_weights(C.model_path, by_name=True)
+	model_classifier.load_weights(C.model_path, by_name=True)
 except:
-	print('Could not load pretrained model weights. Weights can be found in the keras application folder \
-		https://github.com/fchollet/keras/tree/master/keras/applications')
+	pass
 
 optimizer = Adam(lr=1e-5)
 optimizer_classifier = Adam(lr=1e-5)
@@ -147,8 +155,9 @@ model_rpn.compile(optimizer=optimizer, loss=[losses.rpn_loss_cls(num_anchors), l
 model_classifier.compile(optimizer=optimizer_classifier, loss=[losses.class_loss_cls, losses.class_loss_regr(len(classes_count)-1)], metrics={'dense_class_{}'.format(len(classes_count)): 'accuracy'})
 model_all.compile(optimizer='sgd', loss='mae')
 
-epoch_length = 1000
+epoch_length = 10
 num_epochs = int(options.num_epochs)
+#num_epochs = 2000
 iter_num = 0
 
 losses = np.zeros((epoch_length, 5))

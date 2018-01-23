@@ -1,9 +1,49 @@
-import cv2
+from PIL import Image, ImageDraw
 import numpy as np
-import copy
 
+GenImSize = 128
 
-def augment(img_data, config, augment=True):
+def MakeCellImage(x, y, r, i):
+    im = Image.new(mode='F', size=(GenImSize, GenImSize))
+    draw = ImageDraw.Draw(im)
+    draw.ellipse(xy=[x-r, y-r, x+r, y+r], fill='White')
+    im = np.array(im).astype(np.float32)
+    im *= (i / 255.0)
+    #im += (np.random.randn(im.shape[0], im.shape[1]) * 0.1) + 0.2
+    #im[im < 0] = 0
+    #im[im > 1] = 1
+    return im
+
+def MakeRandomCellImage(n):
+	rois = []
+	im = np.zeros(shape=(GenImSize, GenImSize))
+	for i in range(n):
+		radius = np.random.randint(low=-5, high=10) + 10
+		intensity = (np.random.randn() * 0.1) + 0.5
+		intensity = max(min(intensity, 1.0), 0.0)
+		position = np.random.randint(low=radius, high=GenImSize-radius, size=2)
+		im += MakeCellImage(position[0], position[1], radius, intensity)
+		rois.append(np.array([position[0] - radius, position[0] + radius, position[1] - radius, position[1] + radius, intensity]))
+	
+	# im_max = max(im.flatten())
+	# im_min = min(im.flatten())
+	# im = (im - im_min) / (im_max - im_min)
+	im += (np.random.randn(im.shape[0], im.shape[1]) * 0.1) + 0.2
+	im[im < 0] = 0
+	im[im > 1] = 1
+	return im, rois
+
+def augment(n=1):
+	im_data = {}
+	im, rois = MakeRandomCellImage(n)
+	im_data['width'] = GenImSize
+	im_data['height'] = GenImSize
+	
+	im_data['bboxes'] = [{'class': 'cell', 'x1': int(box[0]), 'x2': int(box[1]), 'y1': int(box[2]), 'y2': int(box[3])} for box in rois]
+
+	return im_data, im
+
+#def augment(img_data, config, augment=True):
 	assert 'filepath' in img_data
 	assert 'bboxes' in img_data
 	assert 'width' in img_data

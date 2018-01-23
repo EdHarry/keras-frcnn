@@ -1,6 +1,6 @@
 from __future__ import division
 import os
-import cv2
+from PIL import Image, ImageDraw
 import numpy as np
 import sys
 import pickle
@@ -10,7 +10,7 @@ from keras_frcnn import config
 from keras import backend as K
 from keras.layers import Input
 from keras.models import Model
-from keras_frcnn import roi_helpers
+from keras_frcnn import roi_helpers_PIL as roi_helpers
 from keras_frcnn import data_augment
 
 sys.setrecursionlimit(40000)
@@ -61,7 +61,11 @@ def format_img_size(img, C):
 		ratio = img_min_side/height
 		new_width = int(ratio * width)
 		new_height = int(img_min_side)
-	img = cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
+	img = Image.fromarray(img)
+	img = img.resize((new_width, new_height), Image.ANTIALIAS)
+	img = np.array(img)
+
+	#img = cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
 	return img, ratio	
 
 def format_img_channels(img, C):
@@ -166,8 +170,13 @@ for idx in range(64):
 	X, ratio = format_img(img, C)
 	X = np.transpose(X, (0, 2, 3, 1))
 
-	img = (img * 255).astype(np.uint8)
-	img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+	tmp = Image.fromarray((img * 255).astype(np.uint8))
+	img = Image.new('RGBA', tmp.size)
+	img.paste(tmp)
+	del tmp
+	draw = ImageDraw.Draw(img)
+	#img = (img * 255).astype(np.uint8)
+	#img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
 	
 	[Y1, Y2, F] = model_rpn.predict(X)
 	R = roi_helpers.rpn_to_roi(Y1, Y2, C, K.image_dim_ordering(), overlap_thresh=0.7)
@@ -230,7 +239,8 @@ for idx in range(64):
 
 			(real_x1, real_y1, real_x2, real_y2) = get_real_coordinates(ratio, x1, y1, x2, y2)
 
-			cv2.rectangle(img,(real_x1, real_y1), (real_x2, real_y2), (int(class_to_color[key][0]), int(class_to_color[key][1]), int(class_to_color[key][2])),2)
+			draw.rectangle(xy=[real_x1, real_y1, real_x2, real_y2], outline='red')
+    		#cv2.rectangle(img,(real_x1, real_y1), (real_x2, real_y2), (int(class_to_color[key][0]), int(class_to_color[key][1]), int(class_to_color[key][2])),2)
 
 			textLabel = '{}: {}'.format(key,int(100*new_probs[jk]))
 			all_dets.append((key,100*new_probs[jk]))
@@ -246,4 +256,5 @@ for idx in range(64):
 	print(all_dets)
 	#cv2.imshow('img', img)
 	#cv2.waitKey(0)
-	cv2.imwrite('./results_imgs/{}.png'.format(idx),img)
+	#cv2.imwrite('./results_imgs/{}.png'.format(idx),img)
+	img.save('./results_imgs/{}.png'.format(idx))
